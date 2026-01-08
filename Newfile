@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Rank the Movies</title>
+  <style>
+    :root { --bg:#0b1020; --card:#121a33; --text:#e8ecff; --muted:#aab3d6; --border:rgba(255,255,255,.12); }
+    body{ margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; background:radial-gradient(1200px 700px at 50% -20%, #1a2a66 0%, var(--bg) 55%); color:var(--text); }
+    .wrap{ max-width:720px; margin:0 auto; padding:22px 16px 40px; }
+    h1{ font-size:22px; margin:10px 0 6px; }
+    p{ margin:0 0 14px; color:var(--muted); line-height:1.4; }
+    .card{ background:rgba(18,26,51,.9); border:1px solid var(--border); border-radius:18px; padding:14px; box-shadow: 0 16px 30px rgba(0,0,0,.28); }
+    .row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+    button{
+      appearance:none; border:1px solid var(--border); background:rgba(255,255,255,.06); color:var(--text);
+      padding:10px 12px; border-radius:14px; font-weight:600; cursor:pointer;
+    }
+    button:active{ transform: translateY(1px); }
+    #list{ list-style:none; padding:0; margin:10px 0 0; }
+    .item{
+      display:flex; align-items:center; gap:10px;
+      padding:12px 12px; margin:10px 0; border-radius:16px;
+      border:1px solid var(--border); background:rgba(255,255,255,.05);
+      user-select:none; -webkit-user-select:none;
+      touch-action:none; /* important for touch drag on some browsers */
+    }
+    .handle{
+      width:34px; height:34px; border-radius:12px; display:grid; place-items:center;
+      background:rgba(255,255,255,.08); border:1px solid var(--border); flex:0 0 auto;
+      font-size:18px; cursor:grab;
+    }
+    .rank{ font-weight:800; font-size:14px; color:var(--muted); width:42px; flex:0 0 auto; }
+    .title{ font-size:16px; font-weight:700; }
+    .hint{ margin-top:10px; font-size:13px; color:var(--muted); }
+    .saved{ font-size:13px; color:#b9ffcf; margin-top:8px; display:none; }
+    .warn{ font-size:13px; color:#ffcfb9; margin-top:10px; display:none; }
+    .footer{ margin-top:16px; font-size:12px; color:var(--muted); }
+    .kbd{ font-family: ui-monospace,SFMono-Regular,Menlo,monospace; padding:2px 6px; border-radius:8px; border:1px solid var(--border); background:rgba(255,255,255,.05); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Drag to Rank (1 = best)</h1>
+    <p>Reorder the titles below by dragging. Your progress saves automatically on this phone.</p>
+
+    <div class="card">
+      <ul id="list" aria-label="Movie ranking list"></ul>
+
+      <div class="row">
+        <button id="resetBtn" type="button">Reset</button>
+        <button id="copyBtn" type="button">Copy rankings</button>
+      </div>
+
+      <div id="savedToast" class="saved">Saved ✓</div>
+      <div id="warn" class="warn">Drag & drop didn’t initialize. If you’re on a strict network/ad-blocker, try a different connection or browser.</div>
+      <div class="hint">Tip: press and hold the <span class="kbd">≡</span> handle to drag.</div>
+      <div class="footer">Privacy: rankings are stored only in your browser storage (not uploaded anywhere).</div>
+    </div>
+  </div>
+
+  <!-- SortableJS (free). No integrity hash to avoid being blocked by mismatches. -->
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+
+  <script>
+    const STORAGE_KEY = "lotr_hobbit_rank_v2";
+    const titlesDefault = [
+      "The Hobbit",
+      "Desolation of Smaug",
+      "Battle of the Five Armies",
+      "Fellowship of the Ring",
+      "The Two Towers",
+      "Return of the King"
+    ];
+
+    const listEl = document.getElementById("list");
+    const savedToast = document.getElementById("savedToast");
+    const warn = document.getElementById("warn");
+
+    function showSaved(text="Saved ✓") {
+      savedToast.textContent = text;
+      savedToast.style.display = "block";
+      clearTimeout(showSaved._t);
+      showSaved._t = setTimeout(() => (savedToast.style.display = "none"), 900);
+    }
+
+    function loadOrder() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return titlesDefault.slice();
+        const arr = JSON.parse(raw);
+        const ok = Array.isArray(arr) && arr.length === 6 && (new Set(arr)).size === 6;
+        return ok ? arr : titlesDefault.slice();
+      } catch(e) {
+        return titlesDefault.slice();
+      }
+    }
+
+    function currentOrder() {
+      return [...listEl.querySelectorAll(".item")].map(li => li.dataset.title);
+    }
+
+    function saveOrder() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(currentOrder()));
+      refreshRanks();
+      showSaved();
+    }
+
+    function refreshRanks() {
+      [...listEl.querySelectorAll(".item")].forEach((li, idx) => {
+        li.querySelector(".rank").textContent = "#" + (idx + 1);
+      });
+    }
+
+    function render(order) {
+      listEl.innerHTML = "";
+      order.forEach((title, idx) => {
+        const li = document.createElement("li");
+        li.className = "item";
+        li.dataset.title = title;
+        li.innerHTML = `
+          <div class="handle" aria-hidden="true">≡</div>
+          <div class="rank">#${idx + 1}</div>
+          <div class="title">${title}</div>
+        `;
+        listEl.appendChild(li);
+      });
+    }
+
+    render(loadOrder());
+
+    function initSortable() {
+      if (typeof Sortable === "undefined") {
+        warn.style.display = "block";
+        return;
+      }
+      new Sortable(listEl, {
+        animation: 160,
+        handle: ".handle",
+        fallbackOnBody: true,
+        forceFallback: true,          // improves iOS/Chrome touch reliability
+        delayOnTouchOnly: true,
+        delay: 120,                   // short press-and-hold to start dragging
+        touchStartThreshold: 6,
+        onEnd: saveOrder
+      });
+    }
+
+    initSortable();
+
+    document.getElementById("resetBtn").addEventListener("click", () => {
+      localStorage.removeItem(STORAGE_KEY);
+      render(titlesDefault.slice());
+      refreshRanks();
+      showSaved();
+    });
+
+    document.getElementById("copyBtn").addEventListener("click", async () => {
+      const order = currentOrder().map((t, i) => `${i+1}. ${t}`).join("\n");
+      try {
+        await navigator.clipboard.writeText(order);
+        showSaved("Copied ✓");
+      } catch(e) {
+        alert(order);
+      }
+    });
+  </script>
+</body>
+</html>
